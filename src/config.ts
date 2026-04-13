@@ -33,6 +33,44 @@ Do NOT use for email lookup -- use email_find_by_name instead. Do NOT use for co
           url: { type: "string", description: "Full profile URL (alternative to handle+platform, e.g. https://github.com/torvalds)" },
         },
       },
+      outputSchema: {
+          "type": "object",
+          "properties": {
+            "platform": {
+              "type": "string",
+              "description": "Social platform detected"
+            },
+            "username": {
+              "type": "string",
+              "description": "Username/handle"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "bio": {
+              "type": "string"
+            },
+            "followers": {
+              "type": "number"
+            },
+            "following": {
+              "type": "number"
+            },
+            "avatarUrl": {
+              "type": "string"
+            },
+            "profileUrl": {
+              "type": "string"
+            },
+            "verified": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "platform",
+            "username"
+          ]
+        },
     },
   ],
 };
