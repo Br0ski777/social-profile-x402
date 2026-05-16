@@ -12,7 +12,7 @@
   "remotes": [
     {
       "type": "sse",
-      "url": "https://social-profile-x402-production.up.railway.app/mcp"
+      "url": "https://social-profile.api.klymax402.com/mcp"
     }
   ]
 }
