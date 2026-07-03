@@ -391,11 +391,14 @@ const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_HANDLERS);
 // ---------------------------------------------------------------------------
 
 export function registerRoutes(app: Hono) {
-  app.get("/api/lookup", async (c) => {
+  async function handleLookup(
+    c: any,
+    params: { handle?: string; platform?: string; url?: string }
+  ) {
     await tryRequirePayment(0.008);
-    let handle = c.req.query("handle");
-    let platform = c.req.query("platform")?.toLowerCase();
-    const url = c.req.query("url");
+    let handle = params.handle;
+    let platform = params.platform?.toLowerCase();
+    const url = params.url;
 
     // If URL is provided, detect platform and handle from it
     if (url) {
@@ -425,5 +428,26 @@ export function registerRoutes(app: Hono) {
       const msg = err instanceof Error ? err.message : "Profile lookup failed";
       return c.json({ error: msg, platform, handle, lookup_time_ms: Date.now() - startTime }, 500);
     }
+  }
+
+  app.get("/api/lookup", async (c) => {
+    return handleLookup(c, {
+      handle: c.req.query("handle"),
+      platform: c.req.query("platform"),
+      url: c.req.query("url"),
+    });
+  });
+
+  // POST mirror of the GET route above -- Bazaar (CDP) only reliably indexes
+  // POST payments with valid payloads (~82% conversion vs ~14% for GET-only
+  // resources, confirmed empirically). Same params, same logic, just body
+  // instead of query string.
+  app.post("/api/lookup", async (c) => {
+    const body = await c.req.json().catch(() => ({}) as any);
+    return handleLookup(c, {
+      handle: body.handle,
+      platform: body.platform,
+      url: body.url,
+    });
   });
 }
