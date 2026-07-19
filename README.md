@@ -35,7 +35,30 @@ Any x402-aware client ([`@x402/fetch`](https://www.npmjs.com/package/@x402/fetch
 
 | Tool | Method | Path | Price | Description |
 |---|---|---|---|---|
-| `social_lookup_profile` | GET | `/api/lookup` | $0.008 | Lookup a social media profile by handle or URL |
+| `social_lookup_profile` | GET | `/api/lookup` | $0.015 | Lookup a social media profile by handle or URL |
+| `social_lookup_profile` | POST | `/api/lookup` | $0.015 | Lookup a social media profile by handle or URL. POST variant of social_lookup_profile -- same params passed as JSON body instead of query string. |
+
+### `social_lookup_profile`
+
+Use this when you need public profile data from a social media handle or URL. Returns structured profile data in JSON.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `handle` | string | no | Username/handle to lookup (e.g. torvalds) |
+| `platform` | string | no | Platform to search on (github, twitter, linkedin, youtube) |
+| `url` | string | no | Full profile URL (alternative to handle+platform, e.g. https://github.com/torvalds) |
+
+Example response:
+
+```json
+{"platform":"github","handle":"torvalds","displayName":"Linus Torvalds","bio":"Linux kernel developer","avatarUrl":"https://avatars.githubusercontent.com/u/1024025","followerCount":213000,"followingCount":0,"postCount":729,"location":"Portland, OR","isVerified":true}
+```
+
+**When to use**: influencer research, lead enrichment, social listening, building contact profiles, and verifying social media presence.
+
+**Not for**: email lookup (use `email_find_by_name`), company data (use `company_enrich_from_domain`), person enrichment by email (use `person_enrich_from_email`).
 
 ### `social_lookup_profile`
 
@@ -61,6 +84,7 @@ Example response:
 
 ## Example agent prompts
 
+- "Public profile data from a social media handle or URL"
 - "Public profile data from a social media handle or URL"
 
 ## Payment
