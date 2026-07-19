@@ -9,7 +9,7 @@ export const API_CONFIG: ApiConfig = {
     {
       method: "GET",
       path: "/api/lookup",
-      price: "$0.008",
+      price: "$0.015",
       description: "Lookup a social media profile by handle or URL",
       toolName: "social_lookup_profile",
       toolDescription: `Use this when you need public profile data from a social media handle or URL. Returns structured profile data in JSON.
@@ -75,7 +75,7 @@ Do NOT use for email lookup -- use email_find_by_name instead. Do NOT use for co
     {
       method: "POST",
       path: "/api/lookup",
-      price: "$0.008",
+      price: "$0.015",
       description: "Lookup a social media profile by handle or URL. POST variant of social_lookup_profile -- same params passed as JSON body instead of query string.",
       toolName: "social_lookup_profile",
       toolDescription: `Use this when you need public profile data from a social media handle or URL. Returns structured profile data in JSON.
