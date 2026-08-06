@@ -119,16 +119,83 @@ async function lookupGitHub(handle: string): Promise<ProfileResult> {
 // Twitter/X — try nitter mirrors for public profile scraping
 // ---------------------------------------------------------------------------
 
+// Instances verifiees le 06/08/2026 par appel reel sur /jack :
+//   nitter.cz            -> 200, 74 Ko, profil exploitable   (redirige vers nt.vern.cc)
+//   nitter.net           -> 200 mais **0 octet**             (piege : `resp.ok` est vrai)
+//   nitter.poast.org     -> 403
+//   nitter.privacydev.net-> echec TLS, ne resout plus
+// L'ordre compte : la premiere instance qui rend un corps exploitable gagne.
 const NITTER_MIRRORS = [
-  "https://nitter.privacydev.net",
-  "https://nitter.poast.org",
+  "https://nitter.cz",
   "https://nitter.net",
 ];
+
+// ─── Syndication publique Twitter/X ─────────────────────────────────────────
+// Source primaire des profils : la page de syndication embarque l'objet
+// utilisateur complet dans son JSON `__NEXT_DATA__`. Pas de cle, pas d'auth.
+// Mesure du 06/08/2026 sur @jack : followers_count, statuses_count, created_at,
+// description et location tous presents -- la ou Nitter ne rend plus rien.
+async function fetchSyndicationUser(screenName: string): Promise<any | null> {
+  try {
+    const resp = await fetch(
+      `https://syndication.twitter.com/srv/timeline-profile/screen-name/${encodeURIComponent(screenName)}`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Referer: "https://platform.twitter.com/",
+        },
+        signal: AbortSignal.timeout(12000),
+      },
+    );
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    const data = JSON.parse(m[1]);
+    // L'objet utilisateur est porte par les tweets du timeline, pas par
+    // `contextProvider` qui ne contient que des drapeaux de rendu. Le timeline
+    // incluant les retweets, on ne retient que l'auteur demande : rendre le
+    // profil d'un tiers serait pire que ne rien rendre du tout.
+    const wanted = screenName.replace("@", "").toLowerCase();
+    for (const entry of data?.props?.pageProps?.timeline?.entries || []) {
+      const u = entry?.content?.tweet?.user;
+      if (u && String(u.screen_name || "").toLowerCase() === wanted) return u;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 async function lookupTwitter(handle: string): Promise<ProfileResult> {
   const cleanHandle = handle.replace("@", "");
   let lastError = "";
 
+  const user = await fetchSyndicationUser(cleanHandle);
+  if (user) {
+    return {
+      platform: "twitter",
+      handle: user.screen_name || cleanHandle,
+      display_name: user.name || null,
+      bio: user.description || null,
+      avatar_url: user.profile_image_url_https || null,
+      followers: typeof user.followers_count === "number" ? user.followers_count : null,
+      following: typeof user.friends_count === "number" ? user.friends_count : null,
+      posts_count: typeof user.statuses_count === "number" ? user.statuses_count : null,
+      location: user.location || null,
+      website: user.entities?.url?.urls?.[0]?.expanded_url || null,
+      company: null,
+      created_at: user.created_at || null,
+      verified: Boolean(user.verified || user.is_blue_verified),
+      profile_url: `https://x.com/${user.screen_name || cleanHandle}`,
+      raw: null,
+    };
+  }
+  lastError = "syndication endpoint returned no user object";
+
+  // Repli historique : Nitter. Conserve au cas ou une instance redevienne
+  // exploitable, mais aucune ne l'etait au 06/08/2026.
   for (const mirror of NITTER_MIRRORS) {
     try {
       const res = await fetch(`${mirror}/${encodeURIComponent(cleanHandle)}`, {
@@ -140,6 +207,10 @@ async function lookupTwitter(handle: string): Promise<ProfileResult> {
       if (!res.ok) continue;
 
       const html = await res.text();
+      // Un 200 au corps vide n'est pas un succes. Sans ce garde-fou, la boucle
+      // s'arretait sur la premiere instance qui repond 200 sans rien servir et
+      // rendait un profil integralement nul.
+      if (html.length < 500) continue;
       const root = parseHTML(html);
 
       const displayName = root.querySelector(".profile-card-fullname")?.text?.trim() || null;
@@ -156,6 +227,14 @@ async function lookupTwitter(handle: string): Promise<ProfileResult> {
       const followers = statEls[2]?.text?.trim()?.replace(/,/g, "") || null;
 
       const verified = html.includes("verified-icon") || html.includes("icon-ok");
+
+      // Instance qui repond mais dont la page ne porte ni nom ni statistique :
+      // elle n'a pas la donnee, on passe a la suivante au lieu de rendre un
+      // squelette vide au client qui a paye.
+      if (!displayName && !tweets && !followers) {
+        lastError = `${mirror} served a page without profile data`;
+        continue;
+      }
 
       return {
         platform: "twitter",
@@ -180,24 +259,13 @@ async function lookupTwitter(handle: string): Promise<ProfileResult> {
     }
   }
 
-  // Fallback: return minimal profile with known URL
-  return {
-    platform: "twitter",
-    handle: cleanHandle,
-    display_name: null,
-    bio: null,
-    avatar_url: null,
-    followers: null,
-    following: null,
-    posts_count: null,
-    location: null,
-    website: null,
-    company: null,
-    created_at: null,
-    verified: false,
-    profile_url: `https://x.com/${cleanHandle}`,
-    raw: { error: `Scraping failed — nitter mirrors unreachable. ${lastError}` },
-  };
+  // Aucun miroir n'a servi de donnee exploitable. On leve, ce qui fait repondre
+  // la route en 500 avec un message clair : mieux vaut un echec explicite qu'un
+  // 200 dont tous les champs sont nuls, que l'appelant prendra pour un compte
+  // inexistant alors que c'est notre source qui est tombee.
+  throw new Error(
+    `Twitter profile lookup failed — no Nitter mirror returned usable data for @${cleanHandle}. ${lastError}`.trim()
+  );
 }
 
 // ---------------------------------------------------------------------------
